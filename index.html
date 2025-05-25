@@ -1,144 +1,111 @@
-from IPython.display import HTML, display
-
-html = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>Lunch Roulette (inline demo)</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>오늘 점심은?</title>
 <style>
-:root{
-  --pointer-size:26px;
-  --accent:#2c3e50;
-  font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Noto Sans KR",sans-serif;
-}
+:root{--accent:#2c3e50;--pointer:28px;font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Noto Sans KR",sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
-body{display:flex;flex-direction:column;align-items:center;padding:10px}
-#wrapper{position:relative;margin-top:10px}
+body{display:flex;flex-direction:column;align-items:center;padding:12px}
+h3{margin:12px 0;font-size:1.3rem;font-weight:600}
+#wrapper{position:relative}
 canvas{width:260px;height:260px;touch-action:none}
-#pointer{
-  position:absolute;left:50%;top:-13px;
+#pointer{position:absolute;left:50%;top:-14px;transform:translateX(-50%);
   width:0;height:0;pointer-events:none;
-  border-left:13px solid transparent;border-right:13px solid transparent;
-  border-top:26px solid var(--accent);transform:translateX(-50%);
-}
-button{margin:10px 4px;padding:6px 12px;border:none;border-radius:16px;background:var(--accent);color:#fff;font-weight:600}
-input{padding:6px 10px;border:1px solid #ccc;border-radius:8px;width:120px}
+  border-left:14px solid transparent;border-right:14px solid transparent;
+  border-top:28px solid var(--accent)}
+input,button{font-size:.95rem;border:none;border-radius:16px;padding:7px 12px}
+button{background:var(--accent);color:#fff;font-weight:600;margin-left:6px}
 #modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center}
-#modalBox{background:#fff;padding:20px 16px;border-radius:12px;text-align:center}
+#modalBox{background:#fff;border-radius:12px;padding:20px 24px;text-align:center;max-width:70vw}
+#modalBox h4{margin-bottom:14px;font-size:1.2rem}
 </style>
 </head>
 <body>
-<h3 style="font-weight:600">오늘 점심은?</h3>
-
-<div id="wrapper">
-  <canvas id="wheel" width="260" height="260"></canvas>
-  <div id="pointer"></div>
-</div>
-
-<div style="margin-top:10px">
-  <input id="menuInput" placeholder="메뉴"/>
-  <button id="addBtn">추가</button>
-  <button id="spinBtn">돌려!</button>
-</div>
-
-<div id="modal">
-  <div id="modalBox">
-    <h4 id="resultText"></h4>
-    <button id="closeBtn">확인</button>
+  <h3>오늘 점심은?</h3>
+  <div id="wrapper">
+    <canvas id="wheel" width="260" height="260"></canvas>
+    <div id="pointer"></div>
   </div>
-</div>
+  <div style="margin-top:10px;display:flex;align-items:center">
+    <input id="menuInput" placeholder="메뉴 입력…" />
+    <button id="addBtn">추가</button>
+    <button id="spinBtn">돌려!</button>
+  </div>
 
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <!-- 결과 모달 -->
+  <div id="modal">
+    <div id="modalBox">
+      <h4 id="resultText"></h4>
+      <button id="closeBtn">확인</button>
+    </div>
+  </div>
+
+<!-- 라이브러리 -->
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6/dist/confetti.browser.min.js"></script>
+
 <script>
+/* ---------- 기본 데이터 ---------- */
 const canvas=document.getElementById('wheel'),ctx=canvas.getContext('2d');
 let rotation=0,spinning=false,audioUnlocked=false;
-const sliceColors=['#ff7675','#fdcb6e','#55efc4','#74b9ff','#a29bfe','#fab1a0'];
-let menuItems=['돈까스','짜장면','라면','김밥','쌀국수','샐러드'];
+const menus=['돈까스','짜장면','라면','김밥','쌀국수','샐러드'];
+const colors=['#ff7675','#fdcb6e','#55efc4','#74b9ff','#a29bfe','#fab1a0'];
 
-const beep=new Audio("https://cdn.pixabay.com/download/audio/2022/03/15/audio_c729fb6e3a.mp3?filename=ding-36029.mp3");
-beep.preload='auto';beep.volume=1.0;
+/* ---------- 사운드 (동일 폴더 sound.mp3) ---------- */
+const beep=new Audio('sound.mp3');   // <-- 여기만 수정했습니다
+beep.preload='auto';
+beep.volume=1.0;
 
-function unlockAudio(){if(audioUnlocked)return;beep.play().then(()=>beep.pause()).catch(()=>{});audioUnlocked=true;}
-function playSound(){beep.currentTime=0;beep.play().catch(()=>{});}
+/* ---------- 유틸 ---------- */
+function unlockAudio(){if(audioUnlocked)return;
+  beep.play().then(()=>beep.pause()).catch(()=>{});audioUnlocked=true;}
+function playBeep(){beep.currentTime=0;beep.play().catch(()=>{});}
 
 function drawWheel(){
-  const radius=canvas.width/2, slice=2*Math.PI/menuItems.length;
+  const R=canvas.width/2,SL=2*Math.PI/menus.length;
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.save();ctx.translate(radius,radius);ctx.rotate(rotation*Math.PI/180);
-  menuItems.forEach((item,i)=>{
-    ctx.beginPath();ctx.moveTo(0,0);
-    ctx.fillStyle=sliceColors[i%sliceColors.length];
-    ctx.arc(0,0,radius,i*slice,(i+1)*slice);ctx.fill();
-    ctx.save();
-    ctx.fillStyle='#fff';ctx.rotate((i+0.5)*slice);
-    ctx.translate(radius*0.65,0);ctx.rotate(Math.PI/2);
-    ctx.font='bold 14px Pretendard, sans-serif';
-    ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(item,0,0);
-    ctx.restore();
+  ctx.save();ctx.translate(R,R);ctx.rotate(rotation*Math.PI/180);
+  menus.forEach((m,i)=>{
+    ctx.beginPath();ctx.moveTo(0,0);ctx.fillStyle=colors[i%colors.length];
+    ctx.arc(0,0,R,i*SL,(i+1)*SL);ctx.fill();
+    ctx.save();ctx.fillStyle='#fff';ctx.rotate((i+0.5)*SL);
+    ctx.translate(R*.67,0);ctx.rotate(Math.PI/2);
+    ctx.font='bold 14px Pretendard';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(m,0,0);ctx.restore();
   });
   ctx.restore();
 }
 drawWheel();
 
-/* helpers */
-function angleToIndex(angle){
-  const slice=360/menuItems.length;
-  let a=(angle-rotation+360)%360;
-  a=(a+90)%360;
-  return Math.floor(a/slice);
-}
+function angleToIdx(a){const s=360/menus.length;return Math.floor(((a-rotation+450)%360)/s);}
 
-/* add */
-document.getElementById('addBtn').onclick=()=>{
-  const inp=document.getElementById('menuInput');
-  const txt=inp.value.trim();if(!txt)return inp.focus();
-  menuItems.push(txt);inp.value='';drawWheel();
-};
-
-/* delete by click */
+/* ---------- 인터랙션 ---------- */
 canvas.addEventListener('click',e=>{
-  const rect=canvas.getBoundingClientRect();
-  const x=e.clientX-rect.left-rect.width/2, y=e.clientY-rect.top-rect.height/2;
-  const dist=Math.hypot(x,y);if(dist<rect.width*0.15||menuItems.length<=2)return;
-  const angle=(Math.atan2(y,x)*180/Math.PI+360)%360;
-  const idx=angleToIndex(angle);menuItems.splice(idx,1);drawWheel();
+  const r=canvas.getBoundingClientRect(),x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;
+  if(Math.hypot(x,y)<r.width*0.15||menus.length<=2)return;
+  menus.splice(angleToIdx((Math.atan2(y,x)*180/Math.PI+360)%360),1);drawWheel();
 });
-
-/* spin */
+document.getElementById('addBtn').onclick=()=>{
+  const inp=document.getElementById('menuInput');if(inp.value.trim()){
+    menus.push(inp.value.trim());inp.value='';drawWheel();}};
 document.getElementById('spinBtn').onclick=()=>{
-  unlockAudio();
-  if(spinning||menuItems.length<2)return;spinning=true;
-  const slice=360/menuItems.length;
-  const targetIdx=Math.floor(Math.random()*menuItems.length);
-  const centerAngle=targetIdx*slice+slice/2;
-  let need=(360-(centerAngle-90)+rotation)%360;need+=360*4;
-  const obj={deg:rotation};
-  gsap.to(obj,{deg:rotation+need,duration:4,ease:'power4.out',
-    onUpdate:()=>{rotation=obj.deg%360;drawWheel();},
-    onComplete:()=>{rotation=(rotation+360)%360;drawWheel();
-       showResult(menuItems[targetIdx]);spinning=false;}});
+  unlockAudio();if(spinning||menus.length<2)return;spinning=true;
+  const s=360/menus.length,idx=Math.floor(Math.random()*menus.length),target=idx*s+s/2;
+  let rot=(360-(target-90)+rotation)%360+360*4,obj={d:rotation};
+  gsap.to(obj,{d:rotation+rot,duration:4,ease:'power4.out',
+    onUpdate(){rotation=obj.d%360;drawWheel();},
+    onComplete(){rotation=(rotation+360)%360;drawWheel();spinning=false;show(menus[idx]);}});
 };
 
-/* modal */
-function showResult(text){
-  playSound();
-  document.getElementById('resultText').textContent=text;
+function show(txt){
+  playBeep();
+  document.getElementById('resultText').innerText=txt;
   document.getElementById('modal').style.display='flex';
-  fireConfetti();
+  confetti({particleCount:70,spread:60});
 }
-document.getElementById('closeBtn').onclick=()=>{document.getElementById('modal').style.display='none';};
-
-function fireConfetti(){
-  const end=Date.now()+1000;
-  (function frame(){confetti({particleCount:12,spread:55,origin:{y:0.2}});
-    if(Date.now()<end)requestAnimationFrame(frame);})();
-}
+document.getElementById('closeBtn').onclick=()=>document.getElementById('modal').style.display='none';
 </script>
 </body>
 </html>
-"""
-display(HTML(html))
