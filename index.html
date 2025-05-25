@@ -4,31 +4,40 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>오늘 점심은?</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.8/dist/web/static/pretendard.css"/>
 <style>
-:root{--accent:#2c3e50;--ptr:28px;font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Noto Sans KR",sans-serif}
+:root{ --accent:#2c3e50; --ptr:28px; font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif }
 *{box-sizing:border-box;margin:0;padding:0}
 body{display:flex;flex-direction:column;align-items:center;padding:12px}
-h3{margin:12px 0;font-size:1.3rem;font-weight:600}
+h3{margin:12px 0 6px;font-size:1.35rem;font-weight:700}
+
 #wrapper{position:relative}
-canvas{width:260px;height:260px;touch-action:none}
-#pointer{position:absolute;left:50%;top:-14px;transform:translateX(-50%);
-  width:0;height:0;pointer-events:none;
-  border-left:14px solid transparent;border-right:14px solid transparent;
-  border-top:28px solid var(--accent)}
-input{font-size:.95rem;border:1px solid #ccc;border-radius:16px;padding:7px 12px}
-button{font-size:.95rem;border:none;border-radius:16px;padding:7px 12px;background:var(--accent);color:#fff;font-weight:600;margin-left:6px}
+canvas{width:min(90vw,320px);height:auto;touch-action:none}
+#pointer{position:absolute;left:50%;top:calc(-1*var(--ptr)*.35);            /* ▶︎ 깊이 조정 */
+  width:0;height:0;transform:translateX(-50%);pointer-events:none;
+  border-left:calc(var(--ptr)/2) solid transparent;
+  border-right:calc(var(--ptr)/2) solid transparent;
+  border-top:var(--ptr) solid var(--accent);
+}
+
+input{flex:1 1 160px;font-size:.95rem;border:1px solid #bbb;border-radius:16px;padding:7px 12px;min-width:0}
+input:focus{outline:2px solid var(--accent)}
+button{font-size:.95rem;border:none;border-radius:16px;padding:7px 14px;background:var(--accent);color:#fff;font-weight:600;margin-left:6px}
+
 #modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center}
-#modalBox{background:#fff;border-radius:12px;padding:20px 24px;text-align:center;max-width:70vw}
-#modalBox h4{margin-bottom:14px;font-size:1.2rem}
+#modalBox{background:#fff;border-radius:12px;padding:22px 26px;text-align:center;max-width:72vw}
+#modalBox h4{margin-bottom:14px;font-size:1.25rem}
 </style>
 </head>
 <body>
   <h3>오늘 점심은?</h3>
+
   <div id="wrapper">
-    <canvas id="wheel" width="260" height="260"></canvas>
+    <canvas id="wheel"></canvas>
     <div id="pointer"></div>
   </div>
-  <div style="margin-top:10px;display:flex;align-items:center">
+
+  <div style="margin-top:14px;display:flex;align-items:center;gap:6px">
     <input id="menuInput" placeholder="메뉴 입력…" />
     <button id="addBtn">추가</button>
     <button id="spinBtn">돌려!</button>
@@ -53,61 +62,65 @@ let rot=0,spin=false,aUnlocked=false;
 const menus=['돈까스','짜장면','라면','김밥','쌀국수','샐러드'];
 const colors=['#ff7675','#fdcb6e','#55efc4','#74b9ff','#a29bfe','#fab1a0'];
 
-/* ----- 사운드: 같은 폴더 sound.mp3 ----- */
-const ding=new Audio('sound.mp3');
-ding.preload='auto';ding.volume=1;
-function unlockAudio(){if(aUnlocked)return;ding.play().then(()=>ding.pause()).catch(()=>{});aUnlocked=true;}
-const playDing=()=>{ding.currentTime=0;ding.play().catch(()=>{});};
+/* ----- sound.mp3 (동일 폴더) ----- */
+const ding=new Audio('sound.mp3'); ding.preload='auto'; ding.volume=1;
+function unlockAudio(){ if(aUnlocked) return; ding.play().then(()=>ding.pause()).catch(()=>{}); aUnlocked=true; }
+function playDing(){ ding.currentTime=0; ding.play().catch(()=>{}); }
 
-/* ----- 룰렛 그리기 ----- */
+/* ----- DPR 대응 + 그리기 ----- */
+function resize(){
+  const css = Math.min(window.innerWidth*0.9, 320);
+  cvs.style.width = cvs.style.height = css+"px";
+  const dpr = window.devicePixelRatio||1;
+  cvs.width = cvs.height = css*dpr;
+  ctx.scale(dpr,dpr);
+  draw();
+}
+window.addEventListener('resize', resize);
+
 function draw(){
-  const R=cvs.width/2,SL=2*Math.PI/menus.length;
-  ctx.clearRect(0,0,cvs.width,cvs.height);
-  ctx.save();ctx.translate(R,R);ctx.rotate(rot*Math.PI/180);
+  const R=cvs.clientWidth/2,SL=2*Math.PI/menus.length;
+  ctx.clearRect(0,0,cvs.clientWidth,cvs.clientHeight);
+  ctx.save(); ctx.translate(R,R); ctx.rotate(rot*Math.PI/180);
   menus.forEach((m,i)=>{
-    ctx.beginPath();ctx.moveTo(0,0);ctx.fillStyle=colors[i%colors.length];
-    ctx.arc(0,0,R,i*SL,(i+1)*SL);ctx.fill();
-    ctx.save();ctx.fillStyle='#fff';ctx.rotate((i+.5)*SL);
-    ctx.translate(R*.67,0);ctx.rotate(Math.PI/2);
-    ctx.font='bold 14px Pretendard';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(m,0,0);ctx.restore();
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.fillStyle=colors[i%colors.length];
+    ctx.arc(0,0,R,i*SL,(i+1)*SL); ctx.fill();
+    ctx.save(); ctx.fillStyle='#fff'; ctx.rotate((i+.5)*SL);
+    ctx.translate(R*.66,0); ctx.rotate(Math.PI/2);
+    ctx.font='bold 14px Pretendard'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(m,0,0); ctx.restore();
   });
   ctx.restore();
 }
-draw();
 
-/* ----- 유틸 ----- */
-const angle2idx=a=>Math.floor((((a-rot+450)%360)/(360/menus.length)));
-
-/* ----- 메뉴 추가·삭제 ----- */
-document.getElementById('addBtn').onclick=()=>{
-  const inp=document.getElementById('menuInput');if(!inp.value.trim())return;
-  menus.push(inp.value.trim());inp.value='';draw();
-};
+/* ----- add / delete ----- */
+addBtn.onclick=()=>{ const v=menuInput.value.trim(); if(v){ menus.push(v); menuInput.value=''; draw(); } };
 cvs.onclick=e=>{
-  const r=cvs.getBoundingClientRect(),x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;
-  if(Math.hypot(x,y)<r.width*0.15||menus.length<=2)return;
-  menus.splice(angle2idx((Math.atan2(y,x)*180/Math.PI+360)%360),1);draw();
+  const r=cvs.getBoundingClientRect(),
+        x=e.clientX-r.left-r.width/2,
+        y=e.clientY-r.top-r.height/2;
+  if(Math.hypot(x,y)<r.width*0.15||menus.length<=2) return;
+  const idx=Math.floor((((Math.atan2(y,x)*180/Math.PI+360)-rot+450)%360)/(360/menus.length));
+  menus.splice(idx,1); draw();
 };
 
-/* ----- 스핀 ----- */
-document.getElementById('spinBtn').onclick=()=>{
-  unlockAudio();if(spin||menus.length<2)return;spin=true;
+/* ----- spin ----- */
+spinBtn.onclick=()=>{
+  unlockAudio(); if(spin||menus.length<2) return; spin=true;
   const S=360/menus.length,idx=Math.floor(Math.random()*menus.length),t=idx*S+S/2;
-  let need=(360-(t-90)+rot)%360+360*4,obj={d:rot};
+  const need=(360-(t-90)+rot)%360+360*4, obj={d:rot};
   gsap.to(obj,{d:rot+need,duration:4,ease:'power4.out',
-    onUpdate(){rot=obj.d%360;draw();},
-    onComplete(){rot=(rot+360)%360;draw();spin=false;show(menus[idx]);}});
+    onUpdate(){ rot=obj.d%360; draw(); },
+    onComplete(){ rot=(rot+360)%360; draw(); spin=false; show(menus[idx]); }});
 };
 
-/* ----- 결과 모달 & 폭죽 ----- */
-function show(txt){
-  playDing();
-  document.getElementById('resultText').innerText=txt;
-  document.getElementById('modal').style.display='flex';
-  confetti({particleCount:70,spread:60});
-}
-document.getElementById('closeBtn').onclick=()=>document.getElementById('modal').style.display='none';
+/* ----- modal & confetti ----- */
+function show(t){ playDing(); resultText.textContent=t; modal.style.display='flex';
+  confetti({particleCount:70,spread:60,origin:{y:.2}});}
+closeBtn.onclick=()=>modal.style.display='none';
+
+/* ----- init ----- */
+resize();
 </script>
 </body>
 </html>
