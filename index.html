@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>오늘 점심은?</title>
 <style>
-:root{--accent:#2c3e50;--pointer:28px;font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Noto Sans KR",sans-serif}
+:root{--accent:#2c3e50;--ptr:28px;font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Noto Sans KR",sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
 body{display:flex;flex-direction:column;align-items:center;padding:12px}
 h3{margin:12px 0;font-size:1.3rem;font-weight:600}
@@ -15,8 +15,8 @@ canvas{width:260px;height:260px;touch-action:none}
   width:0;height:0;pointer-events:none;
   border-left:14px solid transparent;border-right:14px solid transparent;
   border-top:28px solid var(--accent)}
-input,button{font-size:.95rem;border:none;border-radius:16px;padding:7px 12px}
-button{background:var(--accent);color:#fff;font-weight:600;margin-left:6px}
+input{font-size:.95rem;border:1px solid #ccc;border-radius:16px;padding:7px 12px}
+button{font-size:.95rem;border:none;border-radius:16px;padding:7px 12px;background:var(--accent);color:#fff;font-weight:600;margin-left:6px}
 #modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center}
 #modalBox{background:#fff;border-radius:12px;padding:20px 24px;text-align:center;max-width:70vw}
 #modalBox h4{margin-bottom:14px;font-size:1.2rem}
@@ -43,64 +43,66 @@ button{background:var(--accent);color:#fff;font-weight:600;margin-left:6px}
   </div>
 
 <!-- 라이브러리 -->
-<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6/dist/confetti.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
 <script>
-/* ---------- 기본 데이터 ---------- */
-const canvas=document.getElementById('wheel'),ctx=canvas.getContext('2d');
-let rotation=0,spinning=false,audioUnlocked=false;
+/* ----- 기본 ----- */
+const cvs=document.getElementById('wheel'),ctx=cvs.getContext('2d');
+let rot=0,spin=false,aUnlocked=false;
 const menus=['돈까스','짜장면','라면','김밥','쌀국수','샐러드'];
 const colors=['#ff7675','#fdcb6e','#55efc4','#74b9ff','#a29bfe','#fab1a0'];
 
-/* ---------- 사운드 (동일 폴더 sound.mp3) ---------- */
-const beep=new Audio('sound.mp3');   // <-- 여기만 수정했습니다
-beep.preload='auto';
-beep.volume=1.0;
+/* ----- 사운드: 같은 폴더 sound.mp3 ----- */
+const ding=new Audio('sound.mp3');
+ding.preload='auto';ding.volume=1;
+function unlockAudio(){if(aUnlocked)return;ding.play().then(()=>ding.pause()).catch(()=>{});aUnlocked=true;}
+const playDing=()=>{ding.currentTime=0;ding.play().catch(()=>{});};
 
-/* ---------- 유틸 ---------- */
-function unlockAudio(){if(audioUnlocked)return;
-  beep.play().then(()=>beep.pause()).catch(()=>{});audioUnlocked=true;}
-function playBeep(){beep.currentTime=0;beep.play().catch(()=>{});}
-
-function drawWheel(){
-  const R=canvas.width/2,SL=2*Math.PI/menus.length;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.save();ctx.translate(R,R);ctx.rotate(rotation*Math.PI/180);
+/* ----- 룰렛 그리기 ----- */
+function draw(){
+  const R=cvs.width/2,SL=2*Math.PI/menus.length;
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+  ctx.save();ctx.translate(R,R);ctx.rotate(rot*Math.PI/180);
   menus.forEach((m,i)=>{
     ctx.beginPath();ctx.moveTo(0,0);ctx.fillStyle=colors[i%colors.length];
     ctx.arc(0,0,R,i*SL,(i+1)*SL);ctx.fill();
-    ctx.save();ctx.fillStyle='#fff';ctx.rotate((i+0.5)*SL);
+    ctx.save();ctx.fillStyle='#fff';ctx.rotate((i+.5)*SL);
     ctx.translate(R*.67,0);ctx.rotate(Math.PI/2);
     ctx.font='bold 14px Pretendard';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(m,0,0);ctx.restore();
   });
   ctx.restore();
 }
-drawWheel();
+draw();
 
-function angleToIdx(a){const s=360/menus.length;return Math.floor(((a-rotation+450)%360)/s);}
+/* ----- 유틸 ----- */
+const angle2idx=a=>Math.floor((((a-rot+450)%360)/(360/menus.length)));
 
-/* ---------- 인터랙션 ---------- */
-canvas.addEventListener('click',e=>{
-  const r=canvas.getBoundingClientRect(),x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;
-  if(Math.hypot(x,y)<r.width*0.15||menus.length<=2)return;
-  menus.splice(angleToIdx((Math.atan2(y,x)*180/Math.PI+360)%360),1);drawWheel();
-});
+/* ----- 메뉴 추가·삭제 ----- */
 document.getElementById('addBtn').onclick=()=>{
-  const inp=document.getElementById('menuInput');if(inp.value.trim()){
-    menus.push(inp.value.trim());inp.value='';drawWheel();}};
-document.getElementById('spinBtn').onclick=()=>{
-  unlockAudio();if(spinning||menus.length<2)return;spinning=true;
-  const s=360/menus.length,idx=Math.floor(Math.random()*menus.length),target=idx*s+s/2;
-  let rot=(360-(target-90)+rotation)%360+360*4,obj={d:rotation};
-  gsap.to(obj,{d:rotation+rot,duration:4,ease:'power4.out',
-    onUpdate(){rotation=obj.d%360;drawWheel();},
-    onComplete(){rotation=(rotation+360)%360;drawWheel();spinning=false;show(menus[idx]);}});
+  const inp=document.getElementById('menuInput');if(!inp.value.trim())return;
+  menus.push(inp.value.trim());inp.value='';draw();
+};
+cvs.onclick=e=>{
+  const r=cvs.getBoundingClientRect(),x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;
+  if(Math.hypot(x,y)<r.width*0.15||menus.length<=2)return;
+  menus.splice(angle2idx((Math.atan2(y,x)*180/Math.PI+360)%360),1);draw();
 };
 
+/* ----- 스핀 ----- */
+document.getElementById('spinBtn').onclick=()=>{
+  unlockAudio();if(spin||menus.length<2)return;spin=true;
+  const S=360/menus.length,idx=Math.floor(Math.random()*menus.length),t=idx*S+S/2;
+  let need=(360-(t-90)+rot)%360+360*4,obj={d:rot};
+  gsap.to(obj,{d:rot+need,duration:4,ease:'power4.out',
+    onUpdate(){rot=obj.d%360;draw();},
+    onComplete(){rot=(rot+360)%360;draw();spin=false;show(menus[idx]);}});
+};
+
+/* ----- 결과 모달 & 폭죽 ----- */
 function show(txt){
-  playBeep();
+  playDing();
   document.getElementById('resultText').innerText=txt;
   document.getElementById('modal').style.display='flex';
   confetti({particleCount:70,spread:60});
