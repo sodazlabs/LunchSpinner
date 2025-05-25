@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Lunch Roulette</title>
+  <!-- 모바일 안전 영역 & 확대방지 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <!-- GSAP -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <!-- Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.4.0/dist/confetti.browser.min.js"></script>
+  <style>
+    :root{
+      --primary:#3498db;
+      --primary-dark:#2d83c2;
+      --bg:#eef3ff;
+      --pointer-size:44px; /* 기본 포인터 크기 */
+    }
+
+    /* ===== Reset & General ===== */
+    *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;-webkit-tap-highlight-color:transparent;margin:0;padding:0;}
+    html,body{height:100%;}
+    body{
+      display:flex;flex-direction:column;align-items:center;
+      min-height:100svh; /* safari safe vh */
+      padding:24px env(safe-area-inset-right) calc(24px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+      background:var(--bg);
+      overscroll-behavior-y:none;
+    }
+
+    /* ===== Typography ===== */
+    h2{
+      margin-block:3vh 8vh;
+      font-size:clamp(22px,5vw,30px);
+      line-height:1.2;
+      text-align:center;
+    }
+
+    /* ===== Roulette ===== */
+    #wrapper{position:relative;width:min(92vw,500px);aspect-ratio:1/1;touch-action:none;}
+    #wheel{width:100%;height:100%;display:block;}
+    #pointer{
+      position:absolute;left:50%;top:calc(-0.35*var(--pointer-size));transform:translateX(-50%);
+      width:0;height:0;
+      border-left:calc(var(--pointer-size)*0.46) solid transparent;
+      border-right:calc(var(--pointer-size)*0.46) solid transparent;
+      border-top:var(--pointer-size) solid #2c3e50; /* 대비되는 진한 색 */
+      filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));
+    }
+    @media(max-width:480px){:root{--pointer-size:30px;} #wrapper{margin-top:4vh;} }
+
+    /* ===== Controls ===== */
+    #controls{margin-top:6vh;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%;}
+    #menuInput{
+      flex:1 1 140px;min-width:120px;max-width:240px;
+      padding:12px 14px;font-size:16px;border:1px solid #ccc;border-radius:8px;
+    }
+    .oval-btn{
+      flex:0 0 auto;
+      padding:12px 30px;
+      min-height:48px;
+      font-size:clamp(15px,4.5vw,18px);
+      border:none;border-radius:28px;
+      cursor:pointer;
+      background:var(--primary);color:#fff;
+      transition:background .2s,opacity .2s;
+    }
+    .oval-btn:hover{background:var(--primary-dark);} /* hover 무시되는 환경도 OK */
+    .oval-btn:disabled{opacity:.5;cursor:not-allowed;}
+
+    /* ===== Modal ===== */
+    #modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:999;backdrop-filter:blur(2px);}
+    #modalContent{
+      background:#fff;
+      padding:20px 28px;
+      border-radius:14px;
+      text-align:center;
+      max-width:85vw;
+      box-shadow:0 8px 20px rgba(0,0,0,.15);
+      animation:pop .35s ease-out;
+    }
+    @keyframes pop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+    #modalContent h3{margin-bottom:16px;font-size:clamp(18px,5vw,26px);}
+    #closeBtn{padding:10px 24px;font-size:16px;border:none;border-radius:8px;background:var(--primary);color:#fff;cursor:pointer;}
+  </style>
+</head>
+<body>
+  <h2>오늘 점심은?</h2>
+
+  <div id="wrapper">
+    <canvas id="wheel"></canvas>
+    <div id="pointer"></div>
+  </div>
+
+  <div id="controls">
+    <input id="menuInput" type="text" placeholder="메뉴 이름" />
+    <button id="addBtn" class="oval-btn">추가</button>
+    <button id="spinBtn" class="oval-btn">돌려!</button>
+  </div>
+
+  <!-- 모달 -->
+  <div id="modal">
+    <div id="modalContent">
+      <h3 id="modalMsg"></h3>
+      <button id="closeBtn">확인</button>
+    </div>
+  </div>
+
+<script>
+/**********************
+ * LocalStorage utils *
+ **********************/
+const STORAGE_KEY='lunchRouletteMenus';
+function loadMenus(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');}catch{ return [];}}
+function saveMenus(){localStorage.setItem(STORAGE_KEY,JSON.stringify(menuItems));}
+
+/**********************
+ * Data & Elements    *
+ **********************/
+let menuItems=loadMenus().length?loadMenus():['김치찌개','된장찌개','돈까스','제육볶음','비빔밥','라면','짬뽕','우동'];
+const colors=['#f94144','#f3722c','#f8961e','#f9844a','#f9c74f','#90be6d','#43aa8b','#577590'];
+const pointerAngle=-90;
+
+const canvas=document.getElementById('wheel');
+const ctx=canvas.getContext('2d');
+let radius;
+const spinBtn=document.getElementById('spinBtn');
+const addBtn=document.getElementById('addBtn');
+const input=document.getElementById('menuInput');
+const modal=document.getElementById('modal');
+const modalMsg=document.getElementById('modalMsg');
+const closeBtn=document.getElementById('closeBtn');
+let currentRotation=0;
+
+/**********************
+ * Canvas Resize      *
+ **********************/
+function resizeCanvas(){
+  const size=document.getElementById('wrapper').clientWidth;
+  if(size===canvas.width) return; // skip if same
+  canvas.width=size; canvas.height=size; radius=size/2;
+  updateWheel();
+}
+window.addEventListener('resize',()=>requestAnimationFrame(resizeCanvas));
+
+/**********************
+ * Draw Wheel         *
+ **********************/
+function drawWheel(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const slice=360/menuItems.length;
+  ctx.save();ctx.translate(radius,radius);
+  for(let i=0;i<menuItems.length;i++){
+    ctx.beginPath();ctx.moveTo(0,0);
+    ctx.arc(0,0,radius,(slice*i-90)*Math.PI/180,(slice*(i+1)-90)*Math.PI/180);
+    ctx.closePath();ctx.fillStyle=colors[i%colors.length];ctx.fill();
+
+    ctx.save();ctx.rotate(((slice*i)+slice/2-90)*Math.PI/180);
+    ctx.textAlign='right';ctx.fillStyle='#fff';ctx.font=`bold ${Math.max(radius*0.06,12)}px sans-serif`;
+    ctx.fillText(menuItems[i],radius-radius*0.06,radius*0.02);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/**********************
+ * Menu Operations    *
+ **********************/
+function addMenu(){const v=input.value.trim();if(!v)return;menuItems.push(v);input.value='';saveMenus();updateWheel();}
+function deleteByAngle(angle){if(menuItems.length<=2) return;const slice=360/menuItems.length;const adj=(angle-((currentRotation%360)+360)%360+360)%360;const idx=Math.floor(adj/slice);menuItems.splice(idx,1);saveMenus();updateWheel();}
+
+addBtn.addEventListener('click',addMenu);
+input.addEventListener('keydown',e=>{if(e.key==='Enter')addMenu();});
+canvas.addEventListener('click',e=>{
+  const rect=canvas.getBoundingClientRect();const x=e.clientX-rect.left;const y=e.clientY-rect.top;
+  const ang=(Math.atan2(y-radius,x-radius)*180/Math.PI+360+90)%360; deleteByAngle(ang);
+});
+
+/**********************
+ * Spin               *
+ **********************/
+function spin(){
+  const slice=360/menuItems.length;const idx=Math.floor(Math.random()*menuItems.length);
+  const extra=4;const center=-90+(idx+0.5)*slice;const norm=((currentRotation%360)+360)%360;
+  const rot=(pointerAngle-center-norm+360)%360;const target=currentRotation+extra*360+rot;
+  spinBtn.disabled=true;
+  gsap.to(canvas,{rotation:target,duration:3.6,ease:'power4.out',onUpdate(){currentRotation=this.targets()[0]._gsap.rotation;},onComplete(){currentRotation=target;showResult(idx);spinBtn.disabled=false;}});
+}
+spinBtn.addEventListener('click',spin);
+
+/**********************
+ * Modal & Confetti   *
+ **********************/
+function showResult(i){modalMsg.textContent=`오늘 점심은 "${menuItems[i]}"!`;modal.style.display='flex';fireConfetti();}
+closeBtn.addEventListener('click',()=>modal.style.display='none');
+function fireConfetti(){for(let t=0;t<3;t++)setTimeout(()=>confetti({particleCount:100,spread:60,startVelocity:40,origin:{y:0.6}}),t*250);} 
+
+/**********************
+ * Init               *
+ **********************/
+function updateWheel(){drawWheel();spinBtn.disabled=menuItems.length<2;}
+resizeCanvas(); // initial draw
+</script>
+</body>
+</html>
